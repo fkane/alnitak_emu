@@ -37,16 +37,18 @@
 #include "alnitak_emu.h"
 #include "dbg.h"
 
+#include <windows.h>
+
 static void usage()
 {
-    fprintf(stderr, "Usage: aacmd.exe OPTIONS\n"
-        "\n"
-        "aacmd.exe <COM port number> L Bnnn S      - turns the panel on to brightness nnn 1-255\n"
-        "aacmd.exe <COM port number> D S           - turns the panel off\n"
-        "aacmd.exe <COM port number> V             - version: x.x.x\n"
-        "aacmd.exe <COM port number> O S           - opens the FlipFlat\n"
-        "aacmd.exe <COM port number> C S           - closes the FlipFlat\n");
-    exit(1);
+	fprintf(stderr, "Usage: aacmd.exe OPTIONS\n"
+		"\n"
+		"aacmd.exe <COM port number> L Bnnn S      - turns the panel on to brightness nnn 1-255\n"
+		"aacmd.exe <COM port number> D S           - turns the panel off\n"
+		"aacmd.exe <COM port number> V             - version: x.x.x\n"
+		"aacmd.exe <COM port number> O S           - opens the FlipFlat\n"
+		"aacmd.exe <COM port number> C S           - closes the FlipFlat\n");
+	exit(1);
 }
 
 /*
@@ -101,56 +103,105 @@ Using the command line application, AACmd.exe
 // aacmd.exe <COM port number> O S         // opens the FlipFlat
 // aacmd.exe <COM port number> C S         // closes the FlipFlat
 
-int main(int argc, char *argv[])
+/*
+Following info is from Leonardo Orazi, author of Voyager:
+
+For test is P command  I wait PRODUCTID
+For version is V I wait AACMD
+For firmware is F I wait FIRMWARE
+For opencover is O I wait OPEN
+For closecover is C I wait CLOSE
+For Light ON is L I wait LIGHT
+For Light OFF is D I wait LIGHT
+For get brightness is G I wait BRIGHT
+For set brightness is B I wait BRIGHT
+
+So, for Voyager support, we have to handle every command which can be sent individually,
+and provide the expected string in the output if it succeeded.
+*/
+
+int main(int argc, char* argv[])
 {
-    if (argc < 3)
-        usage();
+	if (argc < 3)
+		usage();
 
-    int inten = -1;
+	AlnitakEmu dimmer;
 
-    switch (toupper(argv[2][0])) {
-    case 'L': {
-        if (argc < 4 || toupper(argv[3][0]) != 'B')
-            usage();
-        unsigned int val = 0;
-        int n = sscanf_s(&argv[3][1], "%u", &val);
-        if (n != 1 || val < 1 || val > 255)
-            usage();
-        inten = (int)val;
-        break;
-    }
-    case 'D':
-        inten = 0;
-        break;
-    case 'V':
-        printf("version: 3.14.16\n");
-        return 0;
-    case 'O':
-    case 'C':
-        // no-op
-        return 0;
-    default:
-        usage();
-    }
+	if (!dimmer.Connect())
+	{
+		fprintf(stderr, "could not connect to usb dimmer!\n");
+		return 1;
+	}
 
-    AlnitakEmu dimmer;
+	int delay = 3000;
 
-    if (!dimmer.Connect())
-    {
-        fprintf(stderr, "could not connect to usb dimmer!\n");
-        return 1;
-    }
+	for (int i = 2; i < argc; i++) {
 
-    if (inten == 0)
-    {
-        dimmer.setLightOn(false);
-    }
-    else
-    {
-        dimmer.setBrightness(inten);
-        dimmer.setLightOn(true);
-    }
+		char cmd = toupper(argv[i][0]);
 
-    return 0;
+		switch (cmd) {
+
+		case 'L': {
+			if (dimmer.setLightOn(true)) {
+				printf("LIGHT ON ");
+			}
+		}
+				break;
+
+		case 'B': {
+			unsigned int val = 0;
+			int n = sscanf_s(&argv[i][1], "%u", &val);
+			if (n != 1 || val < 1 || val > 255)
+				usage();
+			if (dimmer.setBrightness((unsigned char)val)) {
+				printf("BRIGHT %d ", val);
+			}
+		}
+				break;
+
+		case 'D':
+			if (dimmer.setLightOn(false)) {
+				printf("LIGHT OFF ");
+			}
+			break;
+
+		case 'V':
+			printf("AACMD version: 3.14.16 ");
+			break;
+
+		case 'O':
+			printf("OPEN ");
+			break;
+
+		case 'C':
+			printf("CLOSE ");
+			break;
+
+		case 'P':
+			printf("PRODUCTID ");
+			break;
+
+		case 'F':
+			printf("FIRMWARE ");
+			break;
+
+		case 'G':
+			printf("BRIGHT %d ", dimmer.getBrightness());
+			break;
+
+		case 'S':
+			delay = 0;
+			break;
+
+		default:
+			usage();
+		}
+	}
+
+	printf("\n");
+
+	Sleep(delay);
+
+	return 0;
 }
 
