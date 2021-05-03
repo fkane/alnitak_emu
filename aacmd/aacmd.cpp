@@ -200,6 +200,8 @@ int main(int argc, char* argv[])
 
 	printf("\n");
 
+	dimmer.Disconnect();
+
 	Sleep(delay);
 
 	return 0;
